@@ -1,0 +1,200 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ──────────────────────────────────────
+// Auth (NextAuth.js models)
+// ──────────────────────────────────────
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+// ──────────────────────────────────────
+// User
+// ──────────────────────────────────────
+
+model User {
+  id            String    @id @default(cuid())
+  name          String?
+  email         String?   @unique
+  emailVerified DateTime?
+  image         String?
+  password      String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  accounts    Account[]
+  sessions    Session[]
+  resumes     Resume[]
+  jobProfiles JobProfile[]
+  campaigns   Campaign[]
+  applications Application[]
+}
+
+// ──────────────────────────────────────
+// Resume
+// ──────────────────────────────────────
+
+model Resume {
+  id        String   @id @default(cuid())
+  userId    String
+  name      String
+  version   Int      @default(1)
+  fileUrl   String?
+  fileName  String?
+  fileType  String?
+  parsed    Json?    // Structured JSON: { name, skills, experience, education, summary }
+  isDefault Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  applications Application[]
+
+  @@index([userId])
+}
+
+// ──────────────────────────────────────
+// Job Profile (search criteria)
+// ──────────────────────────────────────
+
+model JobProfile {
+  id                  String   @id @default(cuid())
+  userId              String
+  name                String
+  targetTitles        String[] // e.g. ["Frontend Engineer", "React Developer"]
+  locations           String[] // e.g. ["Remote", "New York, NY"]
+  workMode            String?  // remote | hybrid | onsite
+  salaryMin           Int?
+  salaryMax           Int?
+  experienceLevel     String?  // entry | mid | senior | lead
+  blacklistedCompanies String[]
+  isActive            Boolean  @default(true)
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  campaigns Campaign[]
+
+  @@index([userId])
+}
+
+// ──────────────────────────────────────
+// Job (aggregated from external sources)
+// ──────────────────────────────────────
+
+model Job {
+  id          String   @id @default(cuid())
+  externalId  String?  @unique
+  title       String
+  company     String
+  location    String?
+  description String   @db.Text
+  salary      String?
+  source      String   // linkedin | indeed | glassdoor | etc
+  applyUrl    String?
+  postedAt    DateTime?
+  scrapedAt   DateTime @default(now())
+  createdAt   DateTime @default(now())
+
+  applications Application[]
+
+  @@index([title])
+  @@index([company])
+  @@index([source])
+}
+
+// ──────────────────────────────────────
+// Campaign (mass apply batch)
+// ──────────────────────────────────────
+
+model Campaign {
+  id              String   @id @default(cuid())
+  userId          String
+  jobProfileId    String
+  name            String
+  status          String   @default("draft") // draft | running | paused | completed | failed
+  atsThreshold    Int      @default(60)
+  maxApplications Int      @default(50)
+  appliedCount    Int      @default(0)
+  failedCount     Int      @default(0)
+  skippedCount    Int      @default(0)
+  startedAt       DateTime?
+  completedAt     DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  jobProfile   JobProfile    @relation(fields: [jobProfileId], references: [id])
+  applications Application[]
+
+  @@index([userId])
+}
+
+// ──────────────────────────────────────
+// Application
+// ──────────────────────────────────────
+
+model Application {
+  id           String   @id @default(cuid())
+  userId       String
+  jobId        String
+  resumeId     String
+  campaignId   String?
+  atsScore     Int?
+  status       String   @default("pending") // pending | applied | failed | manual | skipped
+  coverLetter  String?  @db.Text
+  tailoredData Json?    // Tailored resume data for this specific application
+  errorMessage String?
+  appliedAt    DateTime?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  job      Job       @relation(fields: [jobId], references: [id])
+  resume   Resume    @relation(fields: [resumeId], references: [id])
+  campaign Campaign? @relation(fields: [campaignId], references: [id])
+
+  @@unique([userId, jobId])
+  @@index([userId])
+  @@index([campaignId])
+  @@index([status])
+}
