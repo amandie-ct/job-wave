@@ -27,7 +27,7 @@ export function AppSidebar() {
   return (
     <aside className="hidden w-64 border-r bg-card md:block">
       <div className="flex h-16 items-center border-b px-6">
-        <Link href="/dashboard" className="text-xl font-bold">
+        <Link href="/dashboard" className="text-xl font-bold font-fraunces">
           Job Wave
         </Link>
       </div>
